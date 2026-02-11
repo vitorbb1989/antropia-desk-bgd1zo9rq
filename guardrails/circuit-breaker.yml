@@ -1,0 +1,296 @@
+# ================================
+# Circuit Breaker & Timeout Configuration
+# Configurações de resiliência para Antropia Desk
+# ================================
+
+# Configuração de timeouts por tipo de operação
+timeouts:
+  # ================================
+  # Frontend Application Timeouts
+  # ================================
+  frontend:
+    connect_timeout: 5s      # Tempo para estabelecer conexão
+    read_timeout: 30s        # Tempo para ler resposta
+    write_timeout: 10s       # Tempo para enviar request
+    idle_timeout: 60s        # Tempo de idle antes de fechar conexão
+
+  # ================================
+  # API/Backend Timeouts
+  # ================================
+  api:
+    connect_timeout: 3s
+    read_timeout: 15s        # APIs devem responder rapidamente
+    write_timeout: 5s
+    idle_timeout: 30s
+
+  # ================================
+  # Database/Supabase Timeouts
+  # ================================
+  database:
+    connect_timeout: 10s     # Database pode demorar mais para conectar
+    query_timeout: 30s       # Queries complexas podem demorar
+    transaction_timeout: 60s # Transações longas
+    pool_timeout: 5s         # Tempo para obter conexão do pool
+
+  # ================================
+  # External Service Timeouts
+  # ================================
+  external:
+    whatsapp_api: 30s       # WhatsApp API pode ser lenta
+    email_smtp: 15s         # Email deve ser rápido
+    integration_apis: 20s   # Integrações externas
+    file_upload: 120s       # Upload de arquivos pode demorar
+
+# ================================
+# Circuit Breaker Configurations
+# ================================
+circuit_breakers:
+  # ================================
+  # Supabase Circuit Breaker
+  # ================================
+  supabase:
+    failure_threshold: 5      # Falhas antes de abrir circuito
+    success_threshold: 3      # Sucessos para fechar circuito
+    timeout: 30s             # Timeout de cada request
+    interval: 10s            # Intervalo entre tentativas
+    max_requests: 2          # Max requests no estado half-open
+    on_state_change:
+      - log_event
+      - notify_alerts
+
+  # ================================
+  # WhatsApp API Circuit Breaker
+  # ================================
+  whatsapp_api:
+    failure_threshold: 3
+    success_threshold: 2
+    timeout: 30s
+    interval: 30s
+    max_requests: 1
+    fallback:
+      action: use_email       # Fallback para email se WhatsApp falhar
+
+  # ================================
+  # Email Service Circuit Breaker
+  # ================================
+  email_service:
+    failure_threshold: 10     # Email é crítico, mais tolerante
+    success_threshold: 5
+    timeout: 15s
+    interval: 60s
+    max_requests: 3
+    fallback:
+      action: queue_retry     # Queue para retry posterior
+
+  # ================================
+  # Integration APIs Circuit Breaker
+  # ================================
+  integration_apis:
+    failure_threshold: 3
+    success_threshold: 2
+    timeout: 20s
+    interval: 120s           # Integrações podem ter downtime
+    max_requests: 1
+    fallback:
+      action: disable_integration
+
+# ================================
+# Retry Policies
+# ================================
+retry_policies:
+  # ================================
+  # Database Retry Policy
+  # ================================
+  database:
+    max_attempts: 3
+    initial_delay: 100ms
+    max_delay: 1s
+    backoff_multiplier: 2
+    retryable_errors:
+      - connection_timeout
+      - temporary_failure
+      - deadlock
+    non_retryable_errors:
+      - authentication_failed
+      - permission_denied
+
+  # ================================
+  # API Retry Policy
+  # ================================
+  api:
+    max_attempts: 2           # APIs devem ser rápidas
+    initial_delay: 50ms
+    max_delay: 500ms
+    backoff_multiplier: 2
+    retryable_status_codes:
+      - 429  # Rate limited
+      - 502  # Bad gateway
+      - 503  # Service unavailable
+      - 504  # Gateway timeout
+
+  # ================================
+  # External Service Retry Policy
+  # ================================
+  external_service:
+    max_attempts: 5           # Serviços externos podem ser instáveis
+    initial_delay: 1s
+    max_delay: 30s
+    backoff_multiplier: 2
+    jitter: true             # Adicionar jitter para evitar thundering herd
+
+# ================================
+# Load Balancing & Failover
+# ================================
+load_balancing:
+  # ================================
+  # Frontend Load Balancing
+  # ================================
+  frontend:
+    method: least_conn       # Distribute baseado em conexões
+    health_check:
+      path: /health
+      interval: 30s
+      timeout: 5s
+      healthy_threshold: 2
+      unhealthy_threshold: 3
+
+  # ================================
+  # Database Connection Pool
+  # ================================
+  database_pool:
+    min_connections: 5
+    max_connections: 20
+    connection_lifetime: 1h
+    idle_timeout: 10m
+    health_check_interval: 1m
+
+# ================================
+# Monitoring & Alerting
+# ================================
+monitoring:
+  # ================================
+  # Metrics to Collect
+  # ================================
+  metrics:
+    - circuit_breaker_state
+    - timeout_count
+    - retry_count
+    - response_times
+    - error_rates
+    - connection_pool_usage
+
+  # ================================
+  # Alert Thresholds
+  # ================================
+  alerts:
+    circuit_breaker_open:
+      threshold: 1           # Alert immediately when circuit opens
+      severity: warning
+      channels: [slack, email]
+
+    high_timeout_rate:
+      threshold: 10%         # Alert if >10% requests timeout
+      window: 5m
+      severity: warning
+
+    high_error_rate:
+      threshold: 5%          # Alert if >5% requests fail
+      window: 5m
+      severity: critical
+
+    response_time_high:
+      threshold: 2s          # Alert if p95 response time > 2s
+      window: 5m
+      severity: warning
+
+# ================================
+# Graceful Degradation
+# ================================
+degradation:
+  # ================================
+  # Feature Flags para Degradação
+  # ================================
+  features:
+    real_time_updates:
+      fallback: polling      # Se WebSocket falhar, usar polling
+      threshold: 5_failures
+
+    file_uploads:
+      fallback: disable      # Se upload falhar, desabilitar temporariamente
+      threshold: 10_failures
+
+    notifications:
+      fallback: in_app_only  # Se notificações externas falharem
+      threshold: 3_failures
+
+    search:
+      fallback: simple_search # Se busca avançada falhar
+      threshold: 5_failures
+
+# ================================
+# Rate Limiting por Tenant/User
+# ================================
+tenant_rate_limiting:
+  # ================================
+  # Por Organização
+  # ================================
+  per_organization:
+    api_calls: 1000/hour
+    file_uploads: 100/hour
+    tickets_created: 500/day
+
+  # ================================
+  # Por Usuário
+  # ================================
+  per_user:
+    api_calls: 100/hour
+    login_attempts: 5/15min
+    file_uploads: 10/hour
+    tickets_created: 50/day
+
+  # ================================
+  # Por IP
+  # ================================
+  per_ip:
+    requests: 60/minute
+    login_attempts: 3/15min
+    registration_attempts: 5/hour
+
+# ================================
+# Security Guardrails
+# ================================
+security:
+  # ================================
+  # Request Validation
+  # ================================
+  request_validation:
+    max_request_size: 10MB
+    max_json_depth: 10
+    max_array_length: 1000
+    allowed_content_types:
+      - application/json
+      - multipart/form-data
+      - application/x-www-form-urlencoded
+      - text/plain
+
+  # ================================
+  # Content Security
+  # ================================
+  content_security:
+    file_upload:
+      allowed_extensions: ['.jpg', '.jpeg', '.png', '.gif', '.pdf', '.doc', '.docx', '.txt']
+      max_file_size: 5MB
+      virus_scan: true
+
+    xss_protection: true
+    sql_injection_protection: true
+    csrf_protection: true
+
+  # ================================
+  # Access Control
+  # ================================
+  access_control:
+    session_timeout: 24h
+    max_concurrent_sessions: 5
+    require_https: true
+    secure_cookies: true

@@ -1,0 +1,402 @@
+# ================================
+# Docker Compose para PRODUÇÃO - Docker Swarm
+# Sistema Antropia Desk - Help Desk e Ticketing
+# ================================
+
+version: "3.8"
+
+services:
+  # ================================
+  # Frontend - Aplicação React (Produção)
+  # ================================
+  antropia-desk:
+    image: antropia-desk:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        # Build com placeholders - valores reais são injetados no runtime pelo entrypoint
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-https://placeholder.supabase.co}
+        - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY:-placeholder}
+        - NODE_ENV=production
+    hostname: "antropia-desk-{{.Task.Slot}}"
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Sao_Paulo
+      # Secrets lidos em runtime pelo entrypoint via /run/secrets/
+    secrets:
+      - supabase_url
+      - supabase_key
+    networks:
+      - traefik-public
+      - antropia-internal
+    deploy:
+      replicas: 3
+      placement:
+        max_replicas_per_node: 2
+        constraints:
+          - "node.role==worker"
+        preferences:
+          - spread: node.labels.zone
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.2'
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+      labels:
+        # Traefik Labels
+        - "traefik.enable=true"
+        - "traefik.constraint-label=traefik-public"
+
+        # HTTP Redirect to HTTPS
+        - "traefik.http.middlewares.antropia-https.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.antropia-https.redirectscheme.permanent=true"
+
+        # HTTP Router (ambos os domínios)
+        - "traefik.http.routers.antropia-http.rule=Host(`${APP_DOMAIN:-desk.antrop-ia.com}`) || Host(`${STATUS_PAGE_DOMAIN:-desk-status.antrop-ia.com}`)"
+        - "traefik.http.routers.antropia-http.entrypoints=web"
+        - "traefik.http.routers.antropia-http.middlewares=antropia-https"
+
+        # HTTPS Router (ambos os domínios)
+        - "traefik.http.routers.antropia.rule=Host(`${APP_DOMAIN:-desk.antrop-ia.com}`) || Host(`${STATUS_PAGE_DOMAIN:-desk-status.antrop-ia.com}`)"
+        - "traefik.http.routers.antropia.entrypoints=websecure"
+        - "traefik.http.routers.antropia.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.antropia.middlewares=antropia-security,antropia-rate"
+
+        # Service
+        - "traefik.http.services.antropia.loadbalancer.server.port=80"
+        - "traefik.http.services.antropia.loadbalancer.healthcheck.path=/health"
+        - "traefik.http.services.antropia.loadbalancer.healthcheck.interval=30s"
+
+        # Security Headers
+        - "traefik.http.middlewares.antropia-security.headers.accesscontrolallowmethods=GET,POST,PUT,DELETE,OPTIONS"
+        - "traefik.http.middlewares.antropia-security.headers.accesscontrolalloworiginlist=${APP_DOMAIN:-desk.antrop-ia.com},${STATUS_PAGE_DOMAIN:-desk-status.antrop-ia.com}"
+        - "traefik.http.middlewares.antropia-security.headers.accesscontrolmaxage=86400"
+        - "traefik.http.middlewares.antropia-security.headers.addvaryheader=true"
+        - "traefik.http.middlewares.antropia-security.headers.referrerPolicy=strict-origin-when-cross-origin"
+        - "traefik.http.middlewares.antropia-security.headers.hostsproxyheaders=X-Forwarded-Host"
+        - "traefik.http.middlewares.antropia-security.headers.customrequestheaders.X-Forwarded-Proto=https"
+        - "traefik.http.middlewares.antropia-security.headers.customresponseheaders.X-Powered-By=Antropia Desk"
+        - "traefik.http.middlewares.antropia-security.headers.customresponseheaders.Server="
+
+        # Rate Limiting
+        - "traefik.http.middlewares.antropia-rate.ratelimit.burst=20"
+        - "traefik.http.middlewares.antropia-rate.ratelimit.average=10"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ================================
+  # Traefik - Reverse Proxy & Load Balancer
+  # ================================
+  traefik:
+    image: traefik:v3.1
+    command:
+      # Global
+      - "--global.checkNewVersion=false"
+      - "--global.sendAnonymousUsage=false"
+
+      # API
+      - "--api=true"
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # Docker Swarm Provider
+      - "--providers.docker=true"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik-public"
+      - "--providers.docker.watch=true"
+
+      # Let's Encrypt
+      - "--certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL:-admin@antrop-ia.com}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.caServer=https://acme-v02.api.letsencrypt.org/directory"
+
+      # Logging
+      - "--log.level=INFO"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/var/log/traefik/access.log"
+      - "--log.filepath=/var/log/traefik/traefik.log"
+
+      # Metrics (Prometheus)
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.addEntryPointsLabels=true"
+      - "--metrics.prometheus.addServicesLabels=true"
+
+      # Tracing
+      - "--tracing.jaeger=true"
+      - "--tracing.jaeger.samplingType=const"
+      - "--tracing.jaeger.samplingParam=1.0"
+
+    ports:
+      - target: 80
+        published: 80
+        mode: host
+      - target: 443
+        published: 443
+        mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-letsencrypt:/letsencrypt
+      - traefik-logs:/var/log/traefik
+    networks:
+      - traefik-public
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - "node.role==manager"
+        preferences:
+          - spread: node.labels.zone
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+      labels:
+        - "traefik.enable=true"
+        - "traefik.constraint-label=traefik-public"
+
+        # Dashboard HTTP Redirect
+        - "traefik.http.routers.traefik-dashboard-http.rule=Host(`traefik.${APP_DOMAIN:-desk.antrop-ia.com}`)"
+        - "traefik.http.routers.traefik-dashboard-http.entrypoints=web"
+        - "traefik.http.routers.traefik-dashboard-http.middlewares=traefik-https"
+
+        # Dashboard HTTPS
+        - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${APP_DOMAIN:-desk.antrop-ia.com}`)"
+        - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+        - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.traefik-dashboard.service=api@internal"
+        - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
+
+        # Dashboard Auth - IMPORTANTE: Gere o hash com:
+        #   htpasswd -nbB admin "SuaSenhaSegura" | sed -e 's/\$/\$\$/g'
+        # e substitua abaixo. Para desabilitar o dashboard, comente as linhas acima.
+        - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_AUTH_USERS:-admin:$$2y$$10$$GENERATE_WITH_htpasswd}"
+
+        # HTTPS Redirect
+        - "traefik.http.middlewares.traefik-https.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.traefik-https.redirectscheme.permanent=true"
+
+  # ================================
+  # Redis - Cache e Sessões (Opcional)
+  # ================================
+  redis:
+    image: redis:7-alpine
+    entrypoint:
+      - sh
+      - -c
+      - |
+        PASS=$${REDIS_PASSWORD:-changeme}
+        if [ -f /run/secrets/redis_password ]; then
+          PASS=$$(cat /run/secrets/redis_password)
+        fi
+        exec redis-server --appendonly yes --requirepass "$$PASS" --maxmemory 256mb --maxmemory-policy allkeys-lru
+    secrets:
+      - redis_password
+    networks:
+      - antropia-internal
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - "node.role==worker"
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - redis-data:/data
+    profiles:
+      - cache
+
+  # ================================
+  # Monitoring - Prometheus (Opcional)
+  # ================================
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - prometheus-data:/prometheus
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - antropia-internal
+      - traefik-public
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - "node.labels.monitoring==true"
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.2'
+          memory: 256M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.constraint-label=traefik-public"
+        - "traefik.http.routers.prometheus.rule=Host(`prometheus.${APP_DOMAIN:-desk.antrop-ia.com}`)"
+        - "traefik.http.routers.prometheus.entrypoints=websecure"
+        - "traefik.http.routers.prometheus.tls.certresolver=letsencrypt"
+        - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+    profiles:
+      - monitoring
+
+  # ================================
+  # Grafana - Dashboards (Opcional)
+  # ================================
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_password
+      - GF_SERVER_DOMAIN=grafana.${APP_DOMAIN:-desk.antrop-ia.com}
+      - GF_SERVER_ROOT_URL=https://grafana.${APP_DOMAIN:-desk.antrop-ia.com}
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_USERS_ALLOW_SIGN_UP=false
+    secrets:
+      - grafana_password
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - antropia-internal
+      - traefik-public
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - "node.labels.monitoring==true"
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.constraint-label=traefik-public"
+        - "traefik.http.routers.grafana.rule=Host(`grafana.${APP_DOMAIN:-desk.antrop-ia.com}`)"
+        - "traefik.http.routers.grafana.entrypoints=websecure"
+        - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+        - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    profiles:
+      - monitoring
+
+  # ================================
+  # Log Aggregation - Loki (Opcional)
+  # ================================
+  loki:
+    image: grafana/loki:latest
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+      - ./monitoring/loki/config.yml:/etc/loki/local-config.yaml:ro
+    networks:
+      - antropia-internal
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - "node.labels.logging==true"
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    profiles:
+      - logging
+
+# ================================
+# Networks
+# ================================
+networks:
+  traefik-public:
+    external: true
+    name: traefik-public
+  antropia-internal:
+    driver: overlay
+    attachable: true
+    name: antropia-internal
+
+# ================================
+# Volumes
+# ================================
+volumes:
+  traefik-letsencrypt:
+    name: traefik-letsencrypt
+  traefik-logs:
+    name: traefik-logs
+  redis-data:
+    name: antropia-redis-data
+  prometheus-data:
+    name: antropia-prometheus-data
+  grafana-data:
+    name: antropia-grafana-data
+  loki-data:
+    name: antropia-loki-data
+
+# ================================
+# Secrets
+# ================================
+secrets:
+  supabase_url:
+    external: true
+    name: antropia_supabase_url_v1
+  supabase_key:
+    external: true
+    name: antropia_supabase_key_v1
+  redis_password:
+    external: true
+    name: antropia_redis_password_v1
+  grafana_password:
+    external: true
+    name: antropia_grafana_password_v1

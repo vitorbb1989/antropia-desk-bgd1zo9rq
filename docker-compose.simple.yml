@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  antropia-desk:
+    image: antropia-desk:latest
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Sao_Paulo
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-URL_NOT_SET}
+      - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY:-KEY_NOT_SET}
+    networks:
+      - traefik-public
+    deploy:
+      replicas: 1
+      labels:
+        # Enable Traefik
+        - "traefik.enable=true"
+        - "traefik.constraint-label=traefik-public"
+        - "traefik.docker.network=traefik-public"
+
+        # HTTP (redirect to HTTPS)
+        - "traefik.http.routers.antropia-http.rule=Host(`desk.antrop-ia.com`)"
+        - "traefik.http.routers.antropia-http.entrypoints=web"
+        - "traefik.http.routers.antropia-http.middlewares=redirect-to-https"
+
+        # HTTPS
+        - "traefik.http.routers.antropia-https.rule=Host(`desk.antrop-ia.com`)"
+        - "traefik.http.routers.antropia-https.entrypoints=websecure"
+        - "traefik.http.routers.antropia-https.tls.certresolver=letsencrypt"
+
+        # Service
+        - "traefik.http.services.antropia.loadbalancer.server.port=80"
+
+        # Redirect middleware
+        - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
+networks:
+  traefik-public:
+    external: true

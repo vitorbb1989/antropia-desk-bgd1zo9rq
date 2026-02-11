@@ -1,0 +1,104 @@
+# ================================
+# Docker Compose - Apenas Aplicação Antropia Desk
+# Usa Traefik existente na rede traefik-public
+# ================================
+
+version: "3.8"
+
+services:
+  # ================================
+  # Frontend - Aplicação React (Produção)
+  # ================================
+  antropia-desk:
+    image: antropia-desk:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+        - NODE_ENV=production
+    hostname: "antropia-desk-{{.Task.Slot}}"
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Sao_Paulo
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+    networks:
+      - traefik-public
+    deploy:
+      replicas: 1
+      placement:
+        max_replicas_per_node: 1
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+      labels:
+        # Traefik Labels
+        - "traefik.enable=true"
+        - "traefik.constraint-label=traefik-public"
+
+        # HTTP Redirect to HTTPS
+        - "traefik.http.middlewares.antropia-https.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.antropia-https.redirectscheme.permanent=true"
+
+        # HTTP Router (ambos os domínios)
+        - "traefik.http.routers.antropia-http.rule=Host(`${APP_DOMAIN}`) || Host(`${STATUS_PAGE_DOMAIN}`)"
+        - "traefik.http.routers.antropia-http.entrypoints=web"
+        - "traefik.http.routers.antropia-http.middlewares=antropia-https"
+
+        # HTTPS Router (ambos os domínios)
+        - "traefik.http.routers.antropia.rule=Host(`${APP_DOMAIN}`) || Host(`${STATUS_PAGE_DOMAIN}`)"
+        - "traefik.http.routers.antropia.entrypoints=websecure"
+        - "traefik.http.routers.antropia.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.antropia.middlewares=antropia-security"
+
+        # Service
+        - "traefik.http.services.antropia.loadbalancer.server.port=80"
+        - "traefik.http.services.antropia.loadbalancer.healthcheck.path=/health"
+        - "traefik.http.services.antropia.loadbalancer.healthcheck.interval=30s"
+
+        # Security Headers
+        - "traefik.http.middlewares.antropia-security.headers.accesscontrolallowmethods=GET,POST,PUT,DELETE,OPTIONS"
+        - "traefik.http.middlewares.antropia-security.headers.accesscontrolalloworiginlist=${APP_DOMAIN},${STATUS_PAGE_DOMAIN}"
+        - "traefik.http.middlewares.antropia-security.headers.accesscontrolmaxage=86400"
+        - "traefik.http.middlewares.antropia-security.headers.addvaryheader=true"
+        - "traefik.http.middlewares.antropia-security.headers.referrerPolicy=strict-origin-when-cross-origin"
+        - "traefik.http.middlewares.antropia-security.headers.hostsproxyheaders=X-Forwarded-Host"
+        - "traefik.http.middlewares.antropia-security.headers.customrequestheaders.X-Forwarded-Proto=https"
+        - "traefik.http.middlewares.antropia-security.headers.customresponseheaders.X-Powered-By=Antropia Desk"
+
+        # Rate Limiting
+        - "traefik.http.middlewares.antropia-rate.ratelimit.burst=20"
+        - "traefik.http.middlewares.antropia-rate.ratelimit.average=10"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# ================================
+# Networks - Usar rede existente
+# ================================
+networks:
+  traefik-public:
+    external: true

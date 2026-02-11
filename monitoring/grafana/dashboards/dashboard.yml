@@ -1,0 +1,64 @@
+# ================================
+# Grafana Dashboards - Antropia Desk
+# Configuração automática de dashboards
+# ================================
+
+apiVersion: 1
+
+# Lista de provedores de dashboards
+providers:
+  # ================================
+  # Dashboards Padrão
+  # ================================
+  - name: 'default'
+    orgId: 1
+    folder: 'Antropia Desk'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 60
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+
+  # ================================
+  # Dashboards de Sistema
+  # ================================
+  - name: 'system'
+    orgId: 1
+    folder: 'System'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 60
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/system
+
+  # ================================
+  # Dashboards de Docker
+  # ================================
+  - name: 'docker'
+    orgId: 1
+    folder: 'Docker'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 60
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/docker
+
+  # ================================
+  # Dashboards de Aplicação
+  # ================================
+  - name: 'application'
+    orgId: 1
+    folder: 'Application'
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 60
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/app

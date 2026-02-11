@@ -1,0 +1,183 @@
+# ================================
+# Rate Limiting Configuration - Antropia Desk
+# Configuração de limitação de taxa para Traefik
+# ================================
+
+# Middleware para rate limiting básico
+http:
+  middlewares:
+    # ================================
+    # Rate limiting geral da aplicação
+    # ================================
+    app-rate-limit:
+      rateLimit:
+        average: 10  # Requests per second
+        burst: 20    # Burst capacity
+        period: 1m   # Time window
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+            excludedIPs:
+              - 127.0.0.1
+              - ::1
+              - 172.16.0.0/12  # Docker networks
+              - 10.0.0.0/8     # Private networks
+
+    # ================================
+    # Rate limiting para API endpoints
+    # ================================
+    api-rate-limit:
+      rateLimit:
+        average: 5   # More restrictive for APIs
+        burst: 15
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # ================================
+    # Rate limiting para login
+    # ================================
+    auth-rate-limit:
+      rateLimit:
+        average: 3   # Very restrictive for auth
+        burst: 5
+        period: 5m   # Longer period
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # ================================
+    # Rate limiting para uploads
+    # ================================
+    upload-rate-limit:
+      rateLimit:
+        average: 2   # File uploads are expensive
+        burst: 5
+        period: 10m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # ================================
+    # Whitelist para IPs confiáveis
+    # ================================
+    whitelist-internal:
+      ipWhiteList:
+        sourceRange:
+          - 172.16.0.0/12    # Docker Swarm networks
+          - 10.0.0.0/8       # Private networks
+          - 192.168.0.0/16   # Local networks
+          # Adicionar IPs específicos conforme necessário
+          # - 203.0.113.0/24  # Office network
+
+    # ================================
+    # Blacklist para IPs maliciosos
+    # ================================
+    blacklist-known-bad:
+      ipWhiteList:
+        sourceRange:
+          # Lista será populada dinamicamente
+          # ou via integração com threat intelligence
+          - 0.0.0.0/32  # Placeholder
+
+    # ================================
+    # Headers de segurança
+    # ================================
+    security-headers:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Requested-With
+          - Accept
+          - Origin
+        accessControlAllowOriginList:
+          - https://desk.antrop-ia.com
+          - https://desk-status.antrop-ia.com
+        accessControlMaxAge: 86400
+        addVaryHeader: true
+        allowedHosts:
+          - desk.antrop-ia.com
+          - desk-status.antrop-ia.com
+        hostsProxyHeaders:
+          - X-Forwarded-Host
+          - X-Forwarded-For
+          - X-Real-IP
+        referrerPolicy: strict-origin-when-cross-origin
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        customFrameOptionsValue: SAMEORIGIN
+        customRequestHeaders:
+          X-Forwarded-Proto: https
+        customResponseHeaders:
+          X-Powered-By: ""
+          Server: ""
+          X-Service: Antropia-Desk
+
+    # ================================
+    # Circuit breaker para resiliência
+    # ================================
+    circuit-breaker:
+      circuitBreaker:
+        checkPeriod: 3s
+        fallbackDuration: 10s
+        recoveryDuration: 5s
+        threshold: 5  # Number of failures before circuit opens
+
+    # ================================
+    # Retry policy
+    # ================================
+    retry-policy:
+      retry:
+        attempts: 3
+        initialInterval: 100ms
+        maxInterval: 1s
+
+# ================================
+# Configurações específicas por rota
+# ================================
+routers:
+  # Aplicação principal - rate limiting moderado
+  app-router:
+    middlewares:
+      - app-rate-limit
+      - security-headers
+      - circuit-breaker
+
+  # API endpoints - rate limiting mais restritivo
+  api-router:
+    middlewares:
+      - api-rate-limit
+      - security-headers
+      - retry-policy
+
+  # Autenticação - rate limiting muito restritivo
+  auth-router:
+    middlewares:
+      - auth-rate-limit
+      - security-headers
+
+  # Upload de arquivos - rate limiting específico
+  upload-router:
+    middlewares:
+      - upload-rate-limit
+      - security-headers
+
+  # Admin panel - whitelist + rate limiting
+  admin-router:
+    middlewares:
+      - whitelist-internal
+      - auth-rate-limit
+      - security-headers
