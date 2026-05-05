@@ -51,9 +51,13 @@ RUN npm run build
 RUN rm -rf node_modules src .env .git
 
 # ================================
-# Etapa 2: Servidor Nginx de Produção
+# Etapa 2: Servidor Nginx de Produção (non-root)
 # ================================
-FROM nginx:1.25-alpine AS production
+# Imagem oficial nginx-unprivileged: roda como user `nginx` (UID 101) por
+# padrão e escuta em 8080 — elimina necessidade de root no container.
+FROM nginxinc/nginx-unprivileged:1.25-alpine AS production
+
+USER root
 
 # Instalar certificados CA atualizados
 RUN apk add --no-cache ca-certificates tzdata \
@@ -72,33 +76,28 @@ COPY --from=builder /app/docker/nginx.conf /etc/nginx/conf.d/default.conf
 # Copiar arquivos buildados para o Nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Criar script de entrada para substituição de variáveis de ambiente
+# Script de entrada para injeção de variáveis em runtime
 COPY --from=builder /app/docker/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Criar usuário não-root para segurança
-RUN addgroup -g 1001 -S nginx-app && \
-    adduser -S -D -H -u 1001 -h /var/cache/nginx -s /sbin/nologin -G nginx-app -g nginx-app nginx-app
-
-# Configurar permissões
-RUN chown -R nginx-app:nginx-app /usr/share/nginx/html && \
-    chown -R nginx-app:nginx-app /var/cache/nginx && \
-    chown -R nginx-app:nginx-app /var/log/nginx && \
+# Garantir que o user `nginx` tenha permissão de leitura/escrita nos paths
+# que o entrypoint precisa modificar (nginx.conf via sed) e nos diretórios
+# de runtime (cache, logs, html).
+RUN chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/log/nginx \
+                          /etc/nginx/conf.d /etc/nginx/conf.d/default.conf && \
     chmod 755 /usr/share/nginx/html && \
     mkdir -p /var/log/nginx /var/cache/nginx/client_temp && \
-    chown -R nginx-app:nginx-app /var/log/nginx
+    chown -R nginx:nginx /var/log/nginx /var/cache/nginx
 
-# Health check - simplified to just check nginx is running
+# Health check baseado em processo
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD pgrep nginx > /dev/null || exit 1
 
-# Expor porta
-EXPOSE 80
+# Porta interna: 8080 (non-root). Traefik faz TLS termination e roteia 443→8080.
+EXPOSE 8080
 
-# Nginx master precisa de root para bind na porta 80 e gravar o PID.
-# Os workers rodam como non-root via diretiva 'user' no nginx.conf principal.
+USER nginx
 
-# Comando de entrada
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
 

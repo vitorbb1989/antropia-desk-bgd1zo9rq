@@ -238,7 +238,37 @@ fi
 
 ## 💾 Backup e Recovery
 
-### Backup Automático
+### ⚠️ Backup do banco Supabase (DADOS)
+
+O script abaixo (`scripts/backup-supabase.sh`) faz `pg_dump` do Postgres do Supabase
+e mantém os dumps locais com retenção de 30 dias. Use-o **independentemente do plano
+Supabase** (Free não tem backup automático; Pro tem mas só funciona se a infra Supabase
+estiver disponível — backup local é defesa em profundidade).
+
+```bash
+# Variáveis necessárias (adicionar ao .env do servidor de produção):
+#   SUPABASE_DB_HOST=db.<project-ref>.supabase.co
+#   SUPABASE_DB_USER=postgres
+#   SUPABASE_DB_PASSWORD=<senha do banco>
+#   SUPABASE_DB_NAME=postgres   (default)
+#   BACKUP_DIR=/var/backups/antropia-desk
+#   RETENTION_DAYS=30
+
+# Rodar manual:
+./scripts/backup-supabase.sh
+
+# Cron diário às 02:00:
+echo "0 2 * * * /opt/antropia-desk/scripts/backup-supabase.sh >> /var/log/antropia-backup.log 2>&1" | crontab -
+
+# Restaurar (em projeto Supabase de teste/staging — NUNCA em produção sem confirmar):
+PGPASSWORD=<senha> pg_restore --host=<host> --username=postgres --dbname=postgres \
+    --no-owner --no-acl --verbose /var/backups/antropia-desk/antropia-desk-YYYYMMDD-HHMMSS.dump
+```
+
+**Validar restore antes do go-live**: criar projeto Supabase de staging, rodar `pg_restore`
+do dump mais recente, conferir que tabelas e dados foram populados.
+
+### Backup de configuração (apenas infra, não dados)
 
 #### Configuração de Backup Diário
 

@@ -64,18 +64,17 @@ export default function Login() {
       <Card className="w-full max-w-md shadow-lg border-0 bg-white">
         <CardHeader className="space-y-2 text-center pb-8">
           <div className="flex justify-center mb-4">
-            {settings.branding.logoUrl ? (
-              <img
-                src={settings.branding.logoUrl}
-                alt="Logo"
-                className="h-14 object-contain"
-                onError={(e) => { e.currentTarget.style.display = 'none' }}
-              />
-            ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                <LifeBuoy className="h-6 w-6" />
-              </div>
-            )}
+            <img
+              src={settings.branding.logoUrl || '/antropia-logo.svg'}
+              alt="Antropia Desk"
+              className="h-14 object-contain"
+              onError={(e) => {
+                const target = e.currentTarget
+                if (target.src !== window.location.origin + '/antropia-logo.svg') {
+                  target.src = '/antropia-logo.svg'
+                }
+              }}
+            />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">
             Antropia Desk

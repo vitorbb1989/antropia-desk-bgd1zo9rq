@@ -38,8 +38,13 @@ export default function ResetPassword() {
     e.preventDefault()
     setError('')
 
-    if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres.')
+    if (password.length < 12) {
+      setError('A senha deve ter pelo menos 12 caracteres.')
+      return
+    }
+
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      setError('A senha deve conter ao menos uma letra maiúscula, uma minúscula, um número e um caractere especial.')
       return
     }
 
@@ -67,18 +72,17 @@ export default function ResetPassword() {
       <Card className="w-full max-w-md shadow-lg border-0 bg-white">
         <CardHeader className="space-y-2 text-center pb-8">
           <div className="flex justify-center mb-4">
-            {settings.branding.logoUrl ? (
-              <img
-                src={settings.branding.logoUrl}
-                alt="Logo"
-                className="h-14 object-contain"
-                onError={(e) => { e.currentTarget.style.display = 'none' }}
-              />
-            ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                <LifeBuoy className="h-6 w-6" />
-              </div>
-            )}
+            <img
+              src={settings.branding.logoUrl || '/antropia-logo.svg'}
+              alt="Antropia Desk"
+              className="h-14 object-contain"
+              onError={(e) => {
+                const target = e.currentTarget
+                if (target.src !== window.location.origin + '/antropia-logo.svg') {
+                  target.src = '/antropia-logo.svg'
+                }
+              }}
+            />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">
             Redefinir Senha
@@ -126,7 +130,7 @@ export default function ResetPassword() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Mín. 12 caracteres, com maiúscula, número e símbolo"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required

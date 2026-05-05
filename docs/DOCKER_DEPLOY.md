@@ -86,8 +86,8 @@ docker build --target production -t antropia-desk:latest .
 # Opção 1: Deploy completo (com Traefik)
 make deploy
 
-# Opção 2: Deploy apenas da aplicação (Traefik existente)
-docker stack deploy -c docker-compose.app.yml antropia-desk
+# Opção 2: Deploy apenas da aplicação (em stack já existente)
+docker stack deploy -c docker-compose.prod.yml antropia-desk
 ```
 
 ### 5. Verificar Status

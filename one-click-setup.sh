@@ -74,7 +74,7 @@ else
 fi
 
 # 4. Clonar repositório (assumindo que já estamos no diretório)
-if [ ! -f "docker-compose.app.yml" ]; then
+if [ ! -f "docker-compose.prod.yml" ]; then
     echo -e "${RED}❌ Arquivos do projeto não encontrados${NC}"
     echo "Execute este script no diretório do projeto Antropia Desk"
     exit 1

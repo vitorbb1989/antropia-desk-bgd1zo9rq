@@ -18,8 +18,8 @@ import useAuthStore from './useAuthStore'
 import { toast } from 'sonner'
 
 const DEFAULT_BRANDING: BrandingSettings = {
-  logoUrl: 'https://img.usecurling.com/i?q=Antropia&shape=outline&color=blue',
-  iconUrl: 'https://img.usecurling.com/i?q=Antropia&shape=fill&color=blue',
+  logoUrl: '',
+  iconUrl: '',
   faviconUrl: '/favicon.ico',
   primaryColor: '#3b82f6',
 }
@@ -50,12 +50,12 @@ const DEFAULT_CHANNELS: NotificationChannelConfig[] = [
   },
   {
     type: 'EMAIL',
-    enabled: true,
+    enabled: false,
     config: {
-      smtpHost: 'smtp.mailgun.org',
+      smtpHost: '',
       smtpPort: '587',
-      smtpUser: 'postmaster@domain.com',
-      senderEmail: 'no-reply@antropia.com',
+      smtpUser: '',
+      senderEmail: '',
     },
   },
 ]

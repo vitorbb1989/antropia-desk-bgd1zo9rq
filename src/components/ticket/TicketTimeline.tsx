@@ -48,16 +48,8 @@ const AttachmentItem = ({ attachment }: { attachment: Attachment }) => {
         className="relative group cursor-pointer overflow-hidden rounded-lg border border-border/60 shadow-sm transition-all hover:shadow-md aspect-[4/3] bg-secondary/20"
         onClick={handleDownload}
       >
-        {/* We use the temporary URL if available for preview, or placeholder if strict security needed.
-                    For this user story, we likely want to use the secure link for preview too, 
-                    but that requires async loading. For UX, we use the local blob url if present (new uploads) 
-                    or the 'url' prop if available (mock data), otherwise we might need a placeholder 
-                 */}
         <img
-          src={
-            attachment.url ||
-            'https://img.usecurling.com/p/300/200?q=locked&color=gray'
-          }
+          src={attachment.url || '/placeholder.svg'}
           alt={attachment.name}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
         />

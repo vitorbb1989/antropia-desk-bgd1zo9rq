@@ -79,14 +79,14 @@ services:
         - "traefik.http.routers.antropia.tls.certresolver=letsencrypt"
         - "traefik.http.routers.antropia.middlewares=antropia-security,antropia-rate"
 
-        # Service
-        - "traefik.http.services.antropia.loadbalancer.server.port=80"
+        # Service (porta 8080 — container roda como non-root via nginx-unprivileged)
+        - "traefik.http.services.antropia.loadbalancer.server.port=8080"
         - "traefik.http.services.antropia.loadbalancer.healthcheck.path=/health"
         - "traefik.http.services.antropia.loadbalancer.healthcheck.interval=30s"
 
         # Security Headers
         - "traefik.http.middlewares.antropia-security.headers.accesscontrolallowmethods=GET,POST,PUT,DELETE,OPTIONS"
-        - "traefik.http.middlewares.antropia-security.headers.accesscontrolalloworiginlist=${APP_DOMAIN:-desk.antrop-ia.com},${STATUS_PAGE_DOMAIN:-desk-status.antrop-ia.com}"
+        - "traefik.http.middlewares.antropia-security.headers.accesscontrolalloworiginlist=https://${APP_DOMAIN:-desk.antrop-ia.com},https://${STATUS_PAGE_DOMAIN:-desk-status.antrop-ia.com}"
         - "traefik.http.middlewares.antropia-security.headers.accesscontrolmaxage=86400"
         - "traefik.http.middlewares.antropia-security.headers.addvaryheader=true"
         - "traefik.http.middlewares.antropia-security.headers.referrerPolicy=strict-origin-when-cross-origin"
@@ -94,12 +94,32 @@ services:
         - "traefik.http.middlewares.antropia-security.headers.customrequestheaders.X-Forwarded-Proto=https"
         - "traefik.http.middlewares.antropia-security.headers.customresponseheaders.X-Powered-By=Antropia Desk"
         - "traefik.http.middlewares.antropia-security.headers.customresponseheaders.Server="
+        # HSTS — força HTTPS por 2 anos, inclui subdomínios, elegível a preload
+        - "traefik.http.middlewares.antropia-security.headers.stsSeconds=63072000"
+        - "traefik.http.middlewares.antropia-security.headers.stsIncludeSubdomains=true"
+        - "traefik.http.middlewares.antropia-security.headers.stsPreload=true"
+        # Defesa em profundidade (Traefik termina TLS, então headers aqui valem mesmo se Nginx mudar)
+        - "traefik.http.middlewares.antropia-security.headers.frameDeny=true"
+        - "traefik.http.middlewares.antropia-security.headers.contentTypeNosniff=true"
+        - "traefik.http.middlewares.antropia-security.headers.browserXssFilter=true"
 
-        # Rate Limiting
+        # Rate Limiting geral (público) — 10 req/s avg, burst 20
         - "traefik.http.middlewares.antropia-rate.ratelimit.burst=20"
         - "traefik.http.middlewares.antropia-rate.ratelimit.average=10"
+
+        # Rate Limiting agressivo para rotas /auth/* — protege login/reset contra brute force
+        - "traefik.http.middlewares.antropia-rate-auth.ratelimit.burst=10"
+        - "traefik.http.middlewares.antropia-rate-auth.ratelimit.average=5"
+        - "traefik.http.middlewares.antropia-rate-auth.ratelimit.period=1m"
+
+        # Router separado para /auth/* aplicando rate limit mais estrito
+        - "traefik.http.routers.antropia-auth.rule=(Host(`${APP_DOMAIN:-desk.antrop-ia.com}`) || Host(`${STATUS_PAGE_DOMAIN:-desk-status.antrop-ia.com}`)) && (PathPrefix(`/login`) || PathPrefix(`/forgot-password`) || PathPrefix(`/reset-password`))"
+        - "traefik.http.routers.antropia-auth.entrypoints=websecure"
+        - "traefik.http.routers.antropia-auth.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.antropia-auth.middlewares=antropia-security,antropia-rate-auth"
+        - "traefik.http.routers.antropia-auth.priority=100"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3

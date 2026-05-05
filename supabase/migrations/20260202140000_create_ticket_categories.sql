@@ -36,18 +36,4 @@ CREATE POLICY "Admins and Agents can manage categories"
 ALTER TABLE tickets ADD COLUMN category_id UUID REFERENCES ticket_categories(id);
 ALTER TABLE tickets ADD COLUMN due_date TIMESTAMPTZ;
 
--- Seed Data Function
-DO $$
-DECLARE
-    org_rec RECORD;
-BEGIN
-    FOR org_rec IN SELECT id FROM organizations LOOP
-        INSERT INTO ticket_categories (organization_id, name, description, sla_hours, color, slug) VALUES
-        (org_rec.id, 'Bug', 'Falha técnica ou erro no funcionamento do sistema.', 24, '#EF4444', 'bug'),
-        (org_rec.id, 'Financeiro', 'Questões relacionadas a pagamentos, faturas e cobranças.', 48, '#10B981', 'financeiro'),
-        (org_rec.id, 'Problema Crítico', 'Interrupção total de serviços essenciais.', 24, '#DC2626', 'problema-critico'),
-        (org_rec.id, 'Problema Médio', 'Dificuldade parcial que afeta a produtividade mas não impede o trabalho.', 32, '#F59E0B', 'problema-medio'),
-        (org_rec.id, 'Problema Leve', 'Dúvidas gerais ou ajustes estéticos e menores.', 72, '#3B82F6', 'problema-leve'),
-        (org_rec.id, 'Outros', 'Assuntos diversos não contemplados nas outras categorias.', 96, '#6B7280', 'outros');
-    END LOOP;
-END $$;
+-- Categories are created by admins via the application UI.

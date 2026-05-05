@@ -1,22 +1,30 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from './cors.ts'
 
+// Reads a required env var without ever logging its value. Returns null if missing.
+// Callers must handle null by returning a generic 500 — never leak which var is missing.
+function readSecret(name: string): string | null {
+  const v = Deno.env.get(name)
+  return v && v.length > 0 ? v : null
+}
+
+function serverMisconfigured(): Response {
+  // Generic message — never name the missing secret in the response.
+  return new Response(JSON.stringify({ error: 'Server misconfigured' }), {
+    status: 500,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
 /**
  * Verify that the request has a valid cron secret.
  * Used by scheduled/cron edge functions (check-sla, generate-reports).
  */
 export function verifyCronSecret(req: Request): Response | null {
+  const expectedSecret = readSecret('CRON_SECRET')
+  if (!expectedSecret) return serverMisconfigured()
+
   const cronSecret = req.headers.get('x-cron-secret')
-  const expectedSecret = Deno.env.get('CRON_SECRET')
-
-  if (!expectedSecret) {
-    console.error('CRON_SECRET env var not set')
-    return new Response(JSON.stringify({ error: 'Server misconfigured' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
-
   if (cronSecret !== expectedSecret) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -36,8 +44,9 @@ export async function verifyUserAuth(
   req: Request,
   organizationId?: string,
 ): Promise<{ user: any; membership?: any } | Response> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const supabaseUrl = readSecret('SUPABASE_URL')
+  const supabaseServiceKey = readSecret('SUPABASE_SERVICE_ROLE_KEY')
+  if (!supabaseUrl || !supabaseServiceKey) return serverMisconfigured()
 
   const authHeader = req.headers.get('Authorization')
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -49,15 +58,24 @@ export async function verifyUserAuth(
 
   const token = authHeader.replace('Bearer ', '')
 
-  // Verify the JWT using the service role client
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+  // Verify the JWT using the service role client.
+  // Wrap in try/catch to ensure no Supabase error message ever bubbles out
+  // verbatim — defense in depth against accidental secret echoing in errors.
+  let supabase
+  let user
+  try {
+    supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const { data, error } = await supabase.auth.getUser(token)
+    if (error || !data.user) {
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    user = data.user
+  } catch {
+    // Do NOT log the caught error: it could include connection strings/headers.
+    return serverMisconfigured()
   }
 
   // If organizationId is provided, verify membership

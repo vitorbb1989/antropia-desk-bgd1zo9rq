@@ -56,7 +56,7 @@ if ! docker info | grep -q "Swarm: active"; then
 fi
 
 # Verificar arquivos necessários
-for file in "Dockerfile" "docker-compose.app.yml" ".env.example"; do
+for file in "Dockerfile" "docker-compose.prod.yml" ".env.example"; do
     if [ ! -f "$file" ]; then
         error "Arquivo $file não encontrado"
     fi
@@ -124,7 +124,7 @@ fi
 
 # 8. Deploy
 log "Executando deploy..."
-if docker stack deploy -c docker-compose.app.yml "$STACK_NAME"; then
+if docker stack deploy -c docker-compose.prod.yml "$STACK_NAME"; then
     success "Deploy executado"
 else
     error "Falha no deploy"

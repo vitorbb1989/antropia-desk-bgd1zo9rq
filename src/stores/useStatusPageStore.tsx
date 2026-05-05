@@ -87,9 +87,7 @@ export function StatusPageProvider({ children }: { children: ReactNode }) {
 
   // Initialize Audio
   useEffect(() => {
-    audioRef.current = new Audio(
-      'https://actions.google.com/sounds/v1/alarms/beep_short.ogg',
-    )
+    audioRef.current = new Audio('/sounds/alert.ogg')
   }, [])
 
   const playAlertSound = useCallback(() => {

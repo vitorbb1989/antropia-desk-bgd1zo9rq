@@ -126,7 +126,7 @@ else
 fi
 
 log "🎯 Antropia Desk iniciado com sucesso!"
-log "🔗 Acesse a aplicação em: http://localhost"
+log "🔗 Acesse a aplicação em: https://${APP_DOMAIN:-desk.antrop-ia.com}"
 log "📋 Dashboard de administração disponível após login"
 
 # Executar comando passado como argumento
