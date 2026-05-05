@@ -1,10 +1,36 @@
 # Panorama Geral — Antropia Desk até Produção
 
+> **Última atualização**: 2026-05-05 (v2 — pós-auditoria de portais)
+
 ## Contexto
 
-Voce esta voltando ao projeto Antropia Desk (sistema de help desk e ticketing) que ja foi colocado em producao em **https://desk.antrop-ia.com** durante esta jornada de trabalho. Este documento e um snapshot do estado atual e serve como guia para retomar o projeto sem precisar reler toda a conversa.
+Voce esta voltando ao projeto Antropia Desk (sistema de help desk e ticketing) que ja esta em producao em **https://desk.antrop-ia.com**. Este documento e um snapshot do estado atual e serve como guia para retomar o projeto sem precisar reler toda a conversa.
 
-**Nada esta commitado ainda** — todo o trabalho da sessao esta como mudancas locais pendentes em `git status`. Antes de qualquer commit/PR e preciso decidir o que entra e o que e descartado.
+**Status do branch**: 2 commits a frente do `origin/main` (nao push ainda).
+
+## Auditoria de portais (2026-05-05)
+
+Auditoria completa do portal cliente (USER) e portal agencia (ADMIN/AGENT) identificou:
+
+### Portal Cliente (USER) — operacional
+- ✅ Login, dashboard, criar ticket, listar tickets, responder, CSAT
+- ✅ Knowledge Base (RLS corrigida — USER nao ve mais drafts)
+- ✅ Profile e preferencias de notificacao
+- ✅ Mobile responsive
+- ⚠️ Notificacoes sao criadas mas **nao tem UI/badge no header**
+- ⚠️ Onboarding sem service plan e confuso
+
+### Portal Agencia (ADMIN/AGENT) — operacional
+- ✅ Dashboard com 5 charts e customizer
+- ✅ CRUD completo de tickets, usuarios, settings, KB, workflows, integracoes
+- ✅ Multi-tenant isolation via RLS validado em todas tabelas criticas
+- ⚠️ Sem **bulk assign**, sem editar prioridade pelo detail, sem mudar role pos-criacao
+- ❌ Sem **audit logs** (compliance gap)
+- ❌ Sem **cron agendado** — edge functions existem mas ninguem as chama
+- ⚠️ Sem **Test Connection** nas integracoes
+- ⚠️ Sem **Test Send** em templates de notificacao
+
+Veja `claude.md → Estado Atual & Auditoria de Portais` para tabela completa de status.
 
 ---
 
@@ -124,20 +150,45 @@ docker-compose.traefik.yml
 
 ## 6. Pendencias antes de "100% producao"
 
-### Bloqueantes para uso real
-- [ ] **Admin precisa configurar pela UI**: branding (logo da organizacao), SMTP, canais de notificacao (WhatsApp/Email), service plans, categorias de ticket
-- [ ] **Trocar a senha do admin** (`Antrop1a` foi senha inicial, deve ser alterada)
-- [ ] **Decidir destino dos compose files marcados para delecao** — `traefik.yml` esta em uso
+### CRITICO (sistema nao funciona 100% sem isso)
+- [ ] **Configurar pg_cron para chamar edge functions** — sem isso, notificacoes ficam empilhadas em `PENDING` para sempre, SLA warnings nunca disparam, reports agendados nunca executam.
+  - pg_cron + pg_net ja estao habilitados no banco
+  - Setar `CRON_SECRET` em Edge Function secrets (`supabase secrets set CRON_SECRET=$(openssl rand -hex 32)`)
+  - Aplicar migration que agenda os 3 jobs (process-notifications, check-sla, generate-reports)
+  - Procedimento completo em `claude.md → Configurar pg_cron`
+- [ ] **Configurar SMTP ou WhatsApp** — admin precisa entrar em `/admin/settings → Canais` com credenciais reais. Sem isso, mesmo com cron rodando, nada e enviado. Provedores recomendados: Mailgun, SendGrid, Resend, AWS SES.
+
+### ALTO (bloqueia experiencia do cliente)
+- [ ] **UI de notificacoes** — backend cria, mas USER/AGENT nao ve badge nem lista no header. Adicionar componente em `src/components/layout/AppHeader.tsx`.
+- [ ] **Audit logs** — nao ha tracking de quem fez o que. Compliance gap. Criar tabela `audit_logs` + triggers.
+- [ ] **Onboarding USER sem service plan** — usuario sem plano consegue logar mas vê "Nenhum servico vinculado" sem orientacao clara.
+
+### MEDIO (UX e produtividade)
+- [ ] Bulk assign no TicketList
+- [ ] Editar prioridade no TicketDetail
+- [ ] Mudar role de usuario apos criacao (hoje precisa remover + reinvitar)
+- [ ] Test Send em templates
+- [ ] Test Connection em integracoes (Planka, Bookstack, etc)
+
+### BAIXO (cosmetico / nice-to-have)
+- [ ] Audio alerts no Status Page
+- [ ] Real-time via websockets
+- [ ] Send time configuravel em reports (hoje sempre meia-noite)
+- [ ] Tooltip de variaveis disponiveis em templates
+
+### Configuracao admin (todos via UI, ~30 min total)
+- [ ] **Trocar senha do admin** (`Antrop1a` e provisoria)
+- [ ] **Branding**: logo da organizacao em `/admin/settings → Branding`
+- [ ] **Convidar primeiros usuarios**: `/admin/users` → invitar com role e service plans
 
 ### Recomendado
-- [ ] Criar DNS A record para `desk-status.antrop-ia.com` se for usar status page (e re-adicionar ao router)
-- [ ] Resolver issue do favicon nao aparecer no browser (ver §8)
-- [ ] Migrar de `docker-compose.traefik.yml` (rede `minha_rede`) para `docker-compose.prod.yml` (rede `traefik-public`) se quiser stack standalone com proprio Traefik
-- [ ] Configurar backups agendados do Supabase (`scripts/backup-supabase.sh` ja existe untracked)
-- [ ] Commitar as mudancas e fazer push para o repo `vitorbb1989/antropia-desk-bgd1zo9rq`
+- [ ] DNS A record para `desk-status.antrop-ia.com` (se for usar status page)
+- [ ] Resolver issue do favicon nao aparecer no browser (parcialmente resolvido com SVG simplificado + .ico real)
+- [ ] Configurar backups agendados do Supabase (`scripts/backup-supabase.sh` existe)
+- [ ] Push dos commits para `origin/main`
 
 ### Opcional/longo prazo
-- [ ] Configurar Sentry (DSN ja preparado no `.env`)
+- [ ] Configurar Sentry (DSN preparado no `.env`)
 - [ ] Configurar Slack webhook para alerts
 - [ ] Habilitar Prometheus + Grafana (profile `monitoring` no `docker-compose.prod.yml`)
 

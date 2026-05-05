@@ -4,10 +4,178 @@
 
 Este documento serve como base de conhecimento para troubleshooting do **Antropia Desk** - Sistema de Help Desk e Ticketing. Todo problema encontrado, solução aplicada, e documentação de operação deve ser registrada aqui para consulta futura.
 
-**Versão**: v1.0
-**Última atualização**: 2026-02-02
+**Versão**: v2.0
+**Última atualização**: 2026-05-05
 **Stack**: React 19 + TypeScript + Vite + Supabase + Docker Swarm
-**Ambiente**: Produção Docker Swarm
+**Ambiente**: Produção em https://desk.antrop-ia.com
+
+> Para snapshot rápido do estado atual, ver [PANORAMA.md](PANORAMA.md). Para auditoria funcional pré-clientes, ver [RELATORIO_VALIDACAO_INTERNA.md](RELATORIO_VALIDACAO_INTERNA.md).
+
+---
+
+## 📋 Estado Atual & Auditoria de Portais (2026-05-05)
+
+Após auditoria completa do portal cliente (USER) e portal agência (ADMIN/AGENT), o sistema tem o seguinte status:
+
+### Portal Cliente (USER) — 12 áreas auditadas
+| # | Feature | Status | Observação |
+|---|---|---|---|
+| 1 | Login/Onboarding | PARCIAL | Falta validar service plan no login |
+| 2 | Dashboard | OK | KPIs e tickets recentes |
+| 3 | Criar ticket | OK | Categorias filtradas por service plan |
+| 4 | Listar meus tickets | OK | RLS isolando por requester_id |
+| 5 | Detalhe + responder | OK | Notas internas escondidas do USER |
+| 6 | Notificações | PARCIAL | Backend cria, **falta UI/badge no header** |
+| 7 | Profile/senha | OK | |
+| 8 | Preferências de notificação | OK | Quiet hours, per-event toggles |
+| 9 | CSAT survey | OK | Aparece no fechamento do ticket |
+| 10 | Knowledge Base | **CORRIGIDO** | RLS de KB ajustada em 20260505120000 |
+| 11 | Empty states | OK | Todos cobertos |
+| 12 | Mobile responsive | OK | Tailwind sm/md/lg breakpoints |
+
+### Portal Agência (ADMIN/AGENT) — 15 áreas auditadas
+| # | Feature | Status | Observação |
+|---|---|---|---|
+| 1 | Dashboard analytics | OK | 5 charts + customizer |
+| 2 | Gestão de tickets | OK | Falta bulk assign |
+| 3 | Detalhe + assign + status | OK | Falta editar prioridade |
+| 4 | Gestão de usuários | OK | Falta UI de mudar role pós-criação |
+| 5 | Settings (categorias, branding, templates, integrações) | OK | |
+| 6 | Workflows | PARCIAL | Editor existe mas conditions/actions limitados |
+| 7 | Integrações (Planka, Bookstack, Krayin, Chatwoot, Typebot) | OK | Sem botão "Test Connection" |
+| 8 | Status Page | OK | Sem audio alerts implementados |
+| 9 | Reports | PARCIAL | UI ok, **cron backend não agendado** |
+| 10 | Knowledge Base mgmt | OK | |
+| 11 | Service plans + categorias | OK | 5 plans + 18 cats criados via seed 20260505110000 |
+| 12 | Notification templates | OK | Falta botão "Test Send" |
+| 13 | Multi-tenant isolation | OK | RLS comprehensive, sem leaks detectados |
+| 14 | Audit logs | **MISSING** | Não há tabela audit_logs nem triggers |
+| 15 | Reports cron | **MISSING** | pg_cron disponível mas não configurado |
+
+---
+
+## 🚨 Bugs Conhecidos & Status
+
+### Resolvidos em 2026-05-05
+
+| Bug | Migration / Fix | Status |
+|---|---|---|
+| `due_date` não calculado para SLA | `20260505100000_add_ticket_due_date_and_public_id.sql` | RESOLVIDO |
+| `public_id` ausente em tickets | mesma migration acima (formato `AD-2026-00001`) | RESOLVIDO |
+| USER vê drafts na KB | `20260505120000_fix_kb_articles_user_visibility.sql` | RESOLVIDO |
+| Mock data em templateUtils, useSettingsStore | Limpeza no commit `8774556` | RESOLVIDO |
+| Seed de organizações antigas no banco | DELETE via REST | RESOLVIDO |
+| Disco do servidor 96% cheio | `docker system prune` (liberou 90 GB) | RESOLVIDO |
+| Deploy quebrado (port 80 vs 8080) | `docker-compose.traefik.yml` ajustado | RESOLVIDO |
+| Healthcheck IPv6 falhando | trocado para `127.0.0.1` | RESOLVIDO |
+
+### Pendentes (priorizados)
+
+#### CRÍTICO (bloqueia operação completa)
+- [ ] **Cron jobs não agendados**: edge functions `process-notifications`, `check-sla`, `generate-reports` existem mas ninguém as chama. Resultado: notificações ficam empilhadas como `PENDING` para sempre.
+  - **Fix**: configurar pg_cron + pg_net (ambos disponíveis). Ver seção "Configurar pg_cron" abaixo.
+- [ ] **SMTP/canais não configurados**: nenhum canal de notificação ativo. Mesmo com cron, nada sai.
+  - **Fix**: admin deve cadastrar credenciais em `/admin/settings → Canais` e testar.
+
+#### ALTO (UX visível para clientes)
+- [ ] **Notificações sem UI**: notificações são criadas no banco mas USER/AGENT não vê badge/lista no header.
+  - **Fix**: criar componente em `src/components/layout/AppHeader.tsx` com `react-query` + `useNotificationStore`.
+- [ ] **Onboarding USER sem service plan**: usuário sem plano consegue logar mas vê "Nenhum servico vinculado" sem orientação clara.
+  - **Fix**: tela onboarding no `Index.tsx` quando `userCategories.length === 0`.
+
+#### MÉDIO (compliance / produtividade)
+- [ ] **Audit logs ausentes**: nenhum rastreio de quem mudou o que, quando.
+  - **Fix**: criar tabela `audit_logs` + triggers em tabelas sensíveis (memberships, tickets DELETE, integrations_config).
+- [ ] **Bulk assign**: agente não consegue atribuir múltiplos tickets a alguém de uma vez.
+- [ ] **Editar prioridade do ticket**: read-only no UI atual.
+- [ ] **Mudar role de usuário pós-criação**: hoje só na invite; precisa remover + reinvitar.
+- [ ] **Test send em templates**: admin não consegue testar template antes de salvar.
+- [ ] **Test connection nas integrações**: cada modal precisa de botão.
+
+#### BAIXO (cosmético / nice-to-have)
+- [ ] **Audio alerts no Status Page**: não implementado.
+- [ ] **Real-time via websockets**: hoje requer refresh.
+- [ ] **Send time configurável em reports**: hoje sempre meia-noite.
+- [ ] **Help/tooltip de variáveis de template**: usuário tem que adivinhar `{{ticket.public_id}}` etc.
+
+---
+
+## ⚙️ Configurar pg_cron (CRÍTICO antes de cliente real)
+
+Pré-requisitos: pg_cron e pg_net já habilitados (verificado em 2026-05-05).
+
+### 1. Setar CRON_SECRET nas Edge Functions
+```bash
+# Gerar secret seguro
+CRON_SECRET=$(openssl rand -hex 32)
+echo "Salve este secret: $CRON_SECRET"
+
+# Setar nos secrets das edge functions
+supabase secrets set CRON_SECRET="$CRON_SECRET" --project-ref wevgxuxaplcmrnsktoud
+```
+
+### 2. Criar migration que agenda os jobs
+
+```sql
+-- supabase/migrations/<TIMESTAMP>_setup_cron_jobs.sql
+-- Salva o CRON_SECRET em vault.secrets para o pg_net usar
+-- (substitua <CRON_SECRET_AQUI> pelo valor gerado)
+SELECT vault.create_secret('<CRON_SECRET_AQUI>', 'cron_secret', 'Secret used by pg_cron to call edge functions');
+
+-- process-notifications: a cada 1 minuto
+SELECT cron.schedule(
+  'process-notifications-job',
+  '* * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://wevgxuxaplcmrnsktoud.supabase.co/functions/v1/process-notifications',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret')
+    )
+  );
+  $$
+);
+
+-- check-sla: a cada 30 minutos
+SELECT cron.schedule(
+  'check-sla-job',
+  '*/30 * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://wevgxuxaplcmrnsktoud.supabase.co/functions/v1/check-sla',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret')
+    )
+  );
+  $$
+);
+
+-- generate-reports: a cada hora (a edge function decide se algum template deve disparar)
+SELECT cron.schedule(
+  'generate-reports-job',
+  '0 * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://wevgxuxaplcmrnsktoud.supabase.co/functions/v1/generate-reports',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret')
+    )
+  );
+  $$
+);
+```
+
+### 3. Verificar que estão agendados
+
+```sql
+SELECT jobname, schedule, active FROM cron.job;
+SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
+```
+
+---
 
 ---
 
@@ -648,8 +816,32 @@ docker network prune -f
 - **MTTR**: < 30 minutes
 - **MTBF**: > 720 hours (30 days)
 
-**Última atualização**: 2026-02-02
-**Próxima revisão**: 2026-03-02
+**Última atualização**: 2026-05-05
+**Próxima revisão**: 2026-06-05
+
+---
+
+## 📝 Change Log
+
+### v2.0 — 2026-05-05
+- ✅ Auditoria completa portal cliente (12 areas) e portal agencia (15 areas)
+- ✅ Migration 20260505100000: trigger automatico de due_date + public_id sequencial
+- ✅ Migration 20260505110000: seed inicial com 5 service plans + 18 categorias
+- ✅ Migration 20260505120000: fix RLS de KB articles (USER nao ve drafts)
+- ✅ Limpeza de mocks/seeds antigos (frontend + migrations)
+- ✅ Branding Antropia (logo + favicon novos)
+- ✅ Producao em desk.antrop-ia.com com SSL valido
+- ✅ Banco Supabase limpo, apenas org `Antrop-IA` + admin
+- ✅ Triggers de SLA validados funcionalmente
+- ⚠️ Identificado: cron jobs nao agendados (instrucoes adicionadas)
+- ⚠️ Identificado: audit logs ausentes (recomendacao adicionada)
+
+### v1.0 — 2026-02-02
+- ✅ Setup inicial Docker Swarm
+- ✅ Implementação de secrets management
+- ✅ Scripts de deploy automatizado
+- ✅ Health checks e monitoramento
+- ✅ Documentação de troubleshooting
 
 ---
 
