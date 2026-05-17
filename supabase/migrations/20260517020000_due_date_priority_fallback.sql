@@ -14,12 +14,16 @@
 -- 1. ATUALIZAR FUNCAO DO TRIGGER BEFORE INSERT
 -- ==============================================================================
 
+-- Usa dollar-quote nomeado ($body$ ... $body$) para evitar conflito com
+-- editores SQL (Supabase, DBeaver) que tentam dividir o input em statements
+-- separados ao encontrar `;` dentro do corpo da funcao quando o quoting
+-- com `$$` simples e mal interpretado.
 CREATE OR REPLACE FUNCTION public.tickets_before_insert_trigger()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $$
+AS $body$
 DECLARE
   v_year TEXT;
   v_seq BIGINT;
@@ -57,7 +61,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$;
+$body$;
 
 -- Trigger ja foi criado em 20260505100000; recreate idempotente.
 DROP TRIGGER IF EXISTS trg_tickets_before_insert ON public.tickets;
