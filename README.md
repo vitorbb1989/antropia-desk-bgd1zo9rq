@@ -39,6 +39,7 @@ Detalhes técnicos por área:
 |---|---|
 | [`OPERATIONS.md`](./OPERATIONS.md) | Operação dia-a-dia: comandos, monitoramento, checklists semanal/mensal, gatilhos para upgrade Supabase Pro |
 | [`SUPABASE_RUNBOOK.md`](./SUPABASE_RUNBOOK.md) | Passo-a-passo Supabase para go-live (rotação de credenciais, SMTP, migrations, cron, validação) |
+| [`GCP_RUNBOOK.md`](./GCP_RUNBOOK.md) | Passo-a-passo GCP para go-live (APIs, Artifact Registry, Secret Manager, Cloud Build, Cloud Run, domain mapping, Cloudflare, backup, uptime, Sentry, canary) |
 | [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md) | Checklist humano de coisas a fazer antes/durante o go-live |
 | [`pllano de melhorias.md`](./pllano%20de%20melhorias.md) | Plano de execução completo da migração para GCP |
 | [`PANORAMA.md`](./PANORAMA.md) | Visão geral do projeto e status atual |
