@@ -1,132 +1,154 @@
-# Projeto Criado com o Skip
+# Antrop-IA Desk
 
-Este projeto foi criado de ponta a ponta com o [Skip](https://goskip.dev).
+Sistema de helpdesk e ticketing da Antrop-IA. Multi-tenant, com SLA automático,
+KB, workflows, integrações (Planka, Bookstack, Krayin, Chatwoot, Typebot,
+WhatsApp via Evolution API) e canais de notificação por email/WhatsApp.
 
-## 🚀 Stack Tecnológica
+Em produção: **https://desk.antrop-ia.com**
 
-- **React 19** - Biblioteca JavaScript para construção de interfaces
-- **Vite** - Build tool extremamente rápida
-- **TypeScript** - Superset tipado do JavaScript
-- **Shadcn UI** - Componentes reutilizáveis e acessíveis
-- **Tailwind CSS** - Framework CSS utility-first
-- **React Router** - Roteamento para aplicações React
-- **React Hook Form** - Gerenciamento de formulários performático
-- **Zod** - Validação de schemas TypeScript-first
-- **Recharts** - Biblioteca de gráficos para React
+## Arquitetura
 
-## 📋 Pré-requisitos
+```
+Browser  ──HTTPS──▶  Cloud Run (nginx + bundle Vite, southamerica-east1)
+                                │
+                                ▼
+                        Supabase BaaS
+                        (Postgres + Auth + Storage + Realtime + Edge Functions)
+                                │
+                                ▼
+                        Resend (SMTP) / Evolution API (WhatsApp)
+```
 
-- Node.js 18+
-- npm
+- **Front:** SPA React 19 + Vite, servida estática por nginx num container no Cloud Run
+- **Back:** sem backend Node próprio. Toda lógica vive em
+  - Postgres (RLS + triggers + RPC functions)
+  - Edge Functions Deno no Supabase (`process-notifications`, `check-sla`,
+    `generate-reports`, `execute-workflow`, `test-integration`,
+    `evolution-webhook`, `whatsapp-webhook`)
+- **Jobs:** `pg_cron` dispara as edge functions (`* * * * *`,
+  `*/30 * * * *`, `0 * * * *`) + retention diária + alerta semanal de uso
 
-## 🔧 Instalação
+Detalhes técnicos por área:
+- Banco / migrations / RLS: `supabase/migrations/`, `supabase/tests/rls/`
+- Edge functions: `supabase/functions/`
+- Deploy / Cloud Build: `cloudbuild.yaml`, `cloudbuild-staging.yaml`
+
+## Documentos vivos
+
+| Arquivo | Quando consultar |
+|---|---|
+| [`OPERATIONS.md`](./OPERATIONS.md) | Operação dia-a-dia: comandos, monitoramento, checklists semanal/mensal, gatilhos para upgrade Supabase Pro |
+| [`SUPABASE_RUNBOOK.md`](./SUPABASE_RUNBOOK.md) | Passo-a-passo Supabase para go-live (rotação de credenciais, SMTP, migrations, cron, validação) |
+| [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md) | Checklist humano de coisas a fazer antes/durante o go-live |
+| [`pllano de melhorias.md`](./pllano%20de%20melhorias.md) | Plano de execução completo da migração para GCP |
+| [`PANORAMA.md`](./PANORAMA.md) | Visão geral do projeto e status atual |
+| [`claude.md`](./claude.md) | Contexto técnico para o agente (Claude Code) |
+
+Arquivos históricos / frozen-in-time em [`legacy/`](./legacy/) — Docker
+Swarm, Traefik, monitoring auto-hospedado, relatórios antigos.
+
+## Stack
+
+- **TypeScript** + **React 19** + **Vite 5** (build via Rolldown)
+- **shadcn/ui** (Radix primitives) + Tailwind CSS + lucide-react
+- **Zustand-like Contexts** (14 stores em `src/stores/`)
+- **react-router-dom v7**, **react-hook-form** + **Zod**, **Recharts**
+- **@supabase/supabase-js** (PostgREST + RPC + RLS, sem ORM)
+- **Sentry** (`@sentry/react`) para error tracking no front
+- **Playwright** para smoke E2E
+
+## Comandos
 
 ```bash
+# Local
 npm install
-```
+npm run dev              # http://localhost:8080
 
-## 💻 Scripts Disponíveis
-
-### Desenvolvimento
-
-```bash
-# Iniciar servidor de desenvolvimento
-npm start
-# ou
-npm run dev
-```
-
-Abre a aplicação em modo de desenvolvimento em [http://localhost:5173](http://localhost:5173).
-
-### Build
-
-```bash
-# Build para produção
-npm run build
-
-# Build para desenvolvimento
-npm run build:dev
-```
-
-Gera os arquivos otimizados para produção na pasta `dist/`.
-
-### Preview
-
-```bash
-# Visualizar build de produção localmente
-npm run preview
-```
-
-Permite visualizar a build de produção localmente antes do deploy.
-
-### Linting e Formatação
-
-```bash
-# Executar linter
+# Validação (igual ao CI)
 npm run lint
+npm run typecheck        # hoje non-blocking — ver task pendente em CI
+npm run build
 
-# Executar linter e corrigir problemas automaticamente
-npm run lint:fix
+# Tests
+npm run e2e:install      # uma vez
+npm run e2e              # roda Playwright contra staging por padrão
 
-# Formatar código com Prettier
-npm run format
+# Build do container (mesma imagem que o Cloud Build produz)
+docker build \
+  --build-arg VITE_SUPABASE_URL=https://wevgxuxaplcmrnsktoud.supabase.co \
+  --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=<anon> \
+  --target production \
+  -t desk:local .
 ```
 
-## 📁 Estrutura do Projeto
+## Deploy
 
-```
-.
-├── src/              # Código fonte da aplicação
-├── public/           # Arquivos estáticos
-├── dist/             # Build de produção (gerado)
-├── node_modules/     # Dependências (gerado)
-└── package.json      # Configurações e dependências do projeto
-```
+Automático via **Cloud Build trigger** no push para `main` (definido em
+`cloudbuild.yaml`):
 
-## 🎨 Componentes UI
-
-Este template inclui uma biblioteca completa de componentes Shadcn UI baseados em Radix UI:
-
-- Accordion
-- Alert Dialog
-- Avatar
-- Button
-- Checkbox
-- Dialog
-- Dropdown Menu
-- Form
-- Input
-- Label
-- Select
-- Switch
-- Tabs
-- Toast
-- Tooltip
-- E muito mais...
-
-## 📝 Ferramentas de Qualidade de Código
-
-- **TypeScript**: Tipagem estática
-- **ESLint**: Análise de código estático
-- **Oxlint**: Linter extremamente rápido
-- **Prettier**: Formatação automática de código
-
-## 🔄 Workflow de Desenvolvimento
-
-1. Instale as dependências: `npm install`
-2. Inicie o servidor de desenvolvimento: `npm start`
-3. Faça suas alterações
-4. Verifique o código: `npm run lint`
-5. Formate o código: `npm run format`
-6. Crie a build: `npm run build`
-7. Visualize a build: `npm run preview`
-
-## 📦 Build e Deploy
-
-Para criar uma build otimizada para produção:
+1. Build da imagem com `--build-arg` injetado do Secret Manager
+2. Push para Artifact Registry (`southamerica-east1-docker.pkg.dev`)
+3. `gcloud run deploy desk --no-traffic` — cria revisão sem cortar tráfego
+4. **Promoção manual** via `gcloud run services update-traffic` (canary):
 
 ```bash
-npm run build
+# Listar revisões
+gcloud run revisions list --service=desk --region=southamerica-east1
+
+# Canary 10%
+gcloud run services update-traffic desk \
+  --to-revisions=desk-NEW=10,desk-OLD=90 \
+  --region=southamerica-east1
+
+# Promover ou rollback
+gcloud run services update-traffic desk --to-revisions=desk-NEW=100  --region=southamerica-east1
+gcloud run services update-traffic desk --to-revisions=desk-OLD=100  --region=southamerica-east1
 ```
 
-Os arquivos otimizados serão gerados na pasta `dist/` e estarão prontos para deploy.
+Staging em branch `staging` (`cloudbuild-staging.yaml`) — sobe direto em
+`desk-staging` sem `--no-traffic`.
+
+## Backup
+
+`scripts/backup-supabase-gcs.sh` + `Dockerfile.backup` rodam em Cloud Run
+Job agendado pelo Cloud Scheduler. Schedule **2x/dia** no Free
+(`0 5,17 * * *` = 02h/14h BRT), **1x/dia** depois de upgrade Pro.
+
+Restore drill **mensal obrigatório** em projeto Supabase staging dedicado —
+ver `OPERATIONS.md` seção *Checklist mensal*.
+
+## Plano (Supabase Free)
+
+Hoje rodamos no plano Free. Limites e gatilhos para upgrade Pro estão
+documentados em `OPERATIONS.md` seção *Operação no Supabase Free*. Os
+artefatos defensivos contra esses limites:
+
+- **Backup próprio** em GCS 2x/dia
+- **Cron `retention-cleanup`** diário (archive + purge integration_logs)
+- **Cron `db-size-alert`** semanal (email quando DB > 70%)
+- **Uptime check** no `/rest/v1/` a cada 5 min (keep-alive + monitor)
+
+## Estrutura
+
+```
+src/                    # front Vite
+  App.tsx               # router com React.lazy
+  components/           # shadcn/ui + dashboard, ticket, kb, settings...
+  pages/                # rotas: auth, tickets, admin, knowledge, reports, settings, docs
+  services/             # 13 services para Supabase (ticketService, kbService, ...)
+  stores/               # 14 Contexts (não Zustand puro apesar do nome)
+  lib/sentry.ts         # init centralizado
+supabase/
+  migrations/           # ~25 SQL versionadas
+  functions/            # 7 edge functions Deno (+ _shared/)
+  tests/rls/            # pgtap suite de isolamento cross-org
+docker/                 # nginx.conf + entrypoint usados pela imagem
+e2e/                    # Playwright smoke
+.github/workflows/      # CI: lint + typecheck + build (+ e2e em staging)
+cloudbuild.yaml         # pipeline produção
+cloudbuild-staging.yaml # pipeline staging
+Dockerfile              # multi-stage: builder Vite → nginx-unprivileged
+Dockerfile.backup       # imagem do Cloud Run Job de backup
+scripts/                # backup, create-tenant, load-test, security-check
+legacy/                 # Docker Swarm / Traefik / monitoring antigo
+```

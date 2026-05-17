@@ -36,3 +36,12 @@ supabase/.temp/
 
 # Docker volumes
 data/
+
+# Playwright
+playwright-report/
+test-results/
+playwright/.cache/
+e2e-results/
+
+# Sentry sourcemap upload
+.sentryclirc

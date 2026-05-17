@@ -38,12 +38,17 @@ lerna-debug.log*
 .DS_Store
 Thumbs.db
 
-# Arquivos de teste
+# Arquivos de teste (front + E2E + DB)
 test/
 tests/
 __tests__/
 *.test.*
 *.spec.*
+e2e/
+playwright.config.ts
+playwright-report/
+test-results/
+supabase/tests/
 
 # Documentation
 README.md
@@ -62,6 +67,15 @@ CHANGELOG.md
 Dockerfile*
 docker-compose*.yml
 .dockerignore
+
+# Cloud Build (não precisa ir pra imagem)
+cloudbuild*.yaml
+
+# Legacy: Docker Swarm / Traefik / self-hosted monitoring
+legacy/
+
+# CI / GitHub
+.github/
 
 # Arquivos de editor
 *.swp
