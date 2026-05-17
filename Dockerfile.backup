@@ -1,5 +1,9 @@
 # Cloud Run Job para backup do Postgres do Supabase → GCS.
 #
+# IMPORTANTE: enquanto rodarmos no Supabase Free (sem PITR), este backup e o
+# UNICO mecanismo de recuperacao de dados. Schedule de 2x/dia (manha + tarde)
+# em vez de 1x/dia. Migracao para 1x/dia quando upgrade para Pro.
+#
 # Build:
 #   gcloud builds submit \
 #     --tag southamerica-east1-docker.pkg.dev/$PROJECT_ID/desk/backup:latest \
@@ -14,13 +18,26 @@
 #     --max-retries=2 \
 #     --task-timeout=15m
 #
-# Agendamento via Cloud Scheduler (diario 02:00 BRT = 05:00 UTC):
+# Agendamento via Cloud Scheduler — 2x/dia (Free) ou 1x/dia (Pro):
+#   # FREE (atual): 02h e 14h BRT = 05h e 17h UTC
 #   gcloud scheduler jobs create http desk-backup-daily \
 #     --location=southamerica-east1 \
-#     --schedule="0 5 * * *" \
+#     --schedule="0 5,17 * * *" \
 #     --uri="https://southamerica-east1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$PROJECT_ID/jobs/desk-backup:run" \
 #     --http-method=POST \
 #     --oauth-service-account-email=cloudbuild-deploy@$PROJECT_ID.iam.gserviceaccount.com
+#
+#   # PRO (apos upgrade, com PITR cobrindo gap intra-dia):
+#   gcloud scheduler jobs update http desk-backup-daily \
+#     --location=southamerica-east1 \
+#     --schedule="0 5 * * *"
+#
+# RESTORE DRILL (mensal, OBRIGATORIO no Free):
+#   1. Criar segundo projeto Supabase Free (mantido so para drill)
+#   2. gcloud storage cp gs://antropia-desk-backups/daily/$(gcloud storage ls gs://antropia-desk-backups/daily/ | tail -1) /tmp/drill.dump
+#   3. pg_restore -d $STAGING_DB_URL --clean --if-exists --no-owner --no-acl /tmp/drill.dump
+#   4. Validar counts: SELECT count(*) FROM tickets, organizations, profiles;
+#   5. Anotar resultado em OPERATIONS.md (data + duracao + observacoes)
 
 FROM google/cloud-sdk:slim
 

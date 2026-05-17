@@ -797,6 +797,119 @@ EOF
 
 ---
 
+## 🆓 Operação no Supabase Free (sem PITR)
+
+Enquanto o projeto rodar no plano Free, os limites apertam e o snapshot
+automático do Supabase pode sumir. Esta seção define operação defensiva.
+
+### Limites duros do plano Free
+
+| Recurso | Limite | Ação quando atinge |
+|---|---|---|
+| Database size | 500 MB | A 500 MB o banco vira **read-only** — app quebra silenciosamente |
+| Egress | 5 GB/mês | PostgREST passa a retornar 402 |
+| MAU (Monthly Active Users) | 50k | Auth para de aceitar logins |
+| Edge function invocations | 500k/mês | Functions retornam 429 |
+| Conexões direct | 60 | Novas connections são recusadas |
+| Conexões pooled (PgBouncer) | 200 | Idem |
+| Backup | Snapshot diário (pode sumir, sem PITR) | **Backup próprio em GCS é obrigatório** |
+
+### Cron jobs internos (aplicar via migration `20260517030000_retention_and_db_size_alert.sql`)
+
+| Job | Schedule | Função |
+|---|---|---|
+| `process-notifications` | `* * * * *` | Drena fila + serve de keep-alive (impede pausa por inatividade de 7d) |
+| `check-sla` | `*/30 * * * *` | Calcula warnings e breaches |
+| `generate-reports` | `0 * * * *` | Agrega métricas hora a hora |
+| `retention-cleanup` | `0 3 * * *` | `archive_old_notifications()` + `purge_old_integration_logs()` |
+| `db-size-alert` | `0 9 * * 0` | Cria notification PENDING se DB > 70% (entregue via SMTP) |
+
+### Checklist semanal (segunda, 10 min)
+
+| O que olhar | Onde | Threshold |
+|---|---|---|
+| DB size atual | Supabase Dashboard → Settings → Usage → Database | < 80% (400 MB) |
+| Egress mensal acumulado | Supabase Dashboard → Settings → Usage → Egress | < 80% (4 GB) |
+| Edge function invocations | Supabase Dashboard → Settings → Usage | < 80% (400k) |
+| Cron jobs ativos | SQL: `SELECT * FROM cron.job` | 5 jobs ativos (3 do plano + 2 da retenção) |
+| Últimas execuções dos crons | `SELECT jobname, status, start_time FROM cron.job_run_details WHERE start_time > NOW() - INTERVAL '24 hours' ORDER BY start_time DESC` | Todos `succeeded`, last_run < 1h |
+| Backup último sucesso | `gsutil ls -l gs://antropia-desk-backups/daily/ \| tail -5` | Arquivo das últimas 12h presente |
+| Tamanho dos backups (anomalias) | `gsutil du -sh gs://antropia-desk-backups/daily/*` | Crescimento linear, sem zerar |
+
+### Checklist mensal (último dia útil, 30 min)
+
+1. **Restore drill obrigatório** — backup nunca testado não existe:
+   ```bash
+   # Em projeto Supabase staging dedicado (segunda conta Free)
+   LATEST=$(gcloud storage ls gs://antropia-desk-backups/daily/ | tail -1)
+   gcloud storage cp "$LATEST" /tmp/drill.dump
+   pg_restore -d "$STAGING_DB_URL" --clean --if-exists --no-owner --no-acl /tmp/drill.dump
+   psql "$STAGING_DB_URL" -c "SELECT count(*) FROM tickets;"
+   psql "$STAGING_DB_URL" -c "SELECT count(*) FROM organizations;"
+   ```
+2. **Auditar tamanho de tabelas**:
+   ```sql
+   SELECT schemaname, tablename,
+          pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+     FROM pg_tables
+    WHERE schemaname = 'public'
+    ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
+    LIMIT 10;
+   ```
+3. **Revisar `notifications_archive`** — se > 100 MB, encurtar retenção de 90 para 60 dias em `cleanup_notifications_archive()`.
+4. **Anotar resultado do drill** na tabela "Histórico de restore drills" abaixo.
+
+### Uptime check defensivo (gera keep-alive)
+
+Configurar no Cloud Monitoring um Uptime Check apontando para o REST do
+Supabase a cada 5 min. Serve dois propósitos:
+
+- Detecta queda do BaaS (que é dependência crítica)
+- Mantém o projeto Free ativo (evita pausa por inatividade)
+
+```bash
+# Console: Monitoring → Uptime checks → Create
+# URL:        https://wevgxuxaplcmrnsktoud.supabase.co/rest/v1/
+# Method:     GET
+# Headers:    apikey: <VITE_SUPABASE_PUBLISHABLE_KEY>
+# Frequency:  5 min
+# Regions:    USA + Brazil + Europe
+# Alert:      2 falhas consecutivas → email/Slack
+```
+
+### Sinais que disparam UPGRADE para Supabase Pro (US$ 25/mês)
+
+Quando QUALQUER um destes acontecer, upgrade na hora — esperar custa mais
+caro do que os US$ 25/mês (~R$ 130, custo de 1h de dev sênior).
+
+| Sinal | Por que upgrade |
+|---|---|
+| DB chega a 400 MB | A 500 MB o banco vira read-only e o app quebra silenciosamente |
+| Egress > 4 GB/mês por 2 meses seguidos | Vai estourar e PostgREST passa a retornar 402 |
+| MAU > 40k | Aproxima do limite de 50k |
+| **Primeiro cliente externo pagante** | Você não quer ser pego por pausa de 7d num momento desses |
+| Backup pg_dump falhar 2x seguidas | Risco de perda permanente vira inaceitável |
+| Receita > US$ 1k/mês | Pro vira insignificante no orçamento |
+
+**Após upgrade Pro**:
+- Ajustar `check_db_size()` para dividir por `8 * 1024 * 1024` (8 GB) em vez de `500 * 1024 * 1024`
+- Reduzir `desk-backup-daily` schedule de `0 5,17 * * *` para `0 5 * * *` (PITR cobre o gap)
+- Documentar a data do upgrade na tabela abaixo
+
+### Histórico de upgrades
+
+| Data | De | Para | Motivo |
+|---|---|---|---|
+| (pendente) | Free | Pro | (preencher quando ocorrer) |
+
+### Histórico de restore drills
+
+| Data | Duração | Backup usado | Counts validados | Observações |
+|---|---|---|---|---|
+| (pendente) | — | — | — | Primeiro drill antes do go-live |
+
+---
+
 **📋 Este guia de operações deve ser consultado regularmente e atualizado conforme novos procedimentos são desenvolvidos.**
 
 Para troubleshooting detalhado, sempre consulte [claude.md](./claude.md).
