@@ -88,7 +88,7 @@ Veja `claude.md → Estado Atual & Auditoria de Portais` para tabela completa de
 
 ### Acesso admin
 - **Email**: `admin@antrop-ia.com`
-- **Senha**: `Antrop1a`
+- **Senha**: `<ROTACIONADA-VER-COFRE>`
 - **Role**: ADMIN
 - **User ID**: `3a2e3957-ab7f-448a-b6cd-f27e3b172c52`
 
@@ -177,7 +177,7 @@ docker-compose.traefik.yml
 - [ ] Tooltip de variaveis disponiveis em templates
 
 ### Configuracao admin (todos via UI, ~30 min total)
-- [ ] **Trocar senha do admin** (`Antrop1a` e provisoria)
+- [ ] **Trocar senha do admin** (`<ROTACIONADA-VER-COFRE>` e provisoria)
 - [ ] **Branding**: logo da organizacao em `/admin/settings → Branding`
 - [ ] **Convidar primeiros usuarios**: `/admin/users` → invitar com role e service plans
 
@@ -266,7 +266,7 @@ docker service rollback antropia-desk_antropia-desk
 | Recurso | URL / Comando |
 |---|---|
 | App | https://desk.antrop-ia.com |
-| Login admin | `admin@antrop-ia.com` / `Antrop1a` |
+| Login admin | `admin@antrop-ia.com` / `<ROTACIONADA-VER-COFRE>` |
 | Supabase dashboard | https://supabase.com/dashboard/project/wevgxuxaplcmrnsktoud |
 | Repo Git | https://github.com/vitorbb1989/antropia-desk-bgd1zo9rq |
 | Servidor | `185.182.184.175` (este host, `oneserver`) |

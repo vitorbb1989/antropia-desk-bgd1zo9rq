@@ -16,12 +16,39 @@ export default defineConfig(({ mode }) => ({
   build: {
     minify: mode !== 'development',
     sourcemap: mode === 'development',
+    // Aviso de chunk subiu para 600KB porque ate dividir tudo continua
+    // havendo um chunk inicial pesado; o que importa e nao ter UM chunk
+    // gigante de 1.5MB+.
+    chunkSizeWarningLimit: 600,
     rolldownOptions: {
       onwarn(warning, warn) {
         if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {
           return
         }
         warn(warning)
+      },
+      output: {
+        // Split por vendor para aproveitar cache entre deploys (mudancas no
+        // codigo da app nao invalidam radix/recharts/supabase).
+        // Rolldown exige manualChunks como funcao.
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('@radix-ui')) return 'radix'
+          if (id.includes('@supabase/supabase-js')) return 'supabase'
+          if (id.includes('recharts') || id.includes('d3-')) return 'charts'
+          if (
+            id.includes('react-hook-form') ||
+            id.includes('@hookform') ||
+            id.includes('/zod/')
+          ) return 'forms'
+          if (
+            id.includes('react-router') ||
+            id.includes('/react/') ||
+            id.includes('/react-dom/') ||
+            id.includes('scheduler')
+          ) return 'react-vendor'
+          return undefined
+        },
       },
     },
   },

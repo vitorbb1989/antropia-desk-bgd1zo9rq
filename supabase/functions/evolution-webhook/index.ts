@@ -1,9 +1,10 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { errorResponse } from '../_shared/errors.ts'
 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    return errorResponse(405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed')
   }
 
   try {
@@ -11,7 +12,7 @@ Deno.serve(async (req: Request) => {
     const apiKey = req.headers.get('apikey')
     const expectedKey = Deno.env.get('EVOLUTION_WEBHOOK_SECRET')
     if (expectedKey && apiKey !== expectedKey) {
-      return new Response('Unauthorized', { status: 401 })
+      return errorResponse(401, 'UNAUTHORIZED', 'Invalid or missing webhook secret')
     }
 
     const body = await req.json()
@@ -40,8 +41,15 @@ Deno.serve(async (req: Request) => {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (err: any) {
-    console.error('[evolution-webhook] Error:', err.message)
-    // Always return 200 to prevent retries
+    // Log structured but return 200 to Evolution to prevent retries.
+    // The error is captured in logs via internalError-style structured payload.
+    console.error(JSON.stringify({
+      severity: 'ERROR',
+      code: 'INTERNAL_ERROR',
+      source: 'evolution-webhook',
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    }))
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

@@ -1,34 +1,39 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
+// Eager: parte do first paint / shell sempre presente.
 import Login from '@/pages/auth/Login'
-import ForgotPassword from '@/pages/auth/ForgotPassword'
-import ResetPassword from '@/pages/auth/ResetPassword'
 import Index from '@/pages/Index'
-import TicketList from '@/pages/tickets/TicketList'
-import NewTicket from '@/pages/tickets/NewTicket'
-import TicketDetail from '@/pages/tickets/TicketDetail'
-import Users from '@/pages/admin/Users'
-import Settings from '@/pages/admin/Settings'
-import Integrations from '@/pages/admin/Integrations'
-import Workflows from '@/pages/admin/Workflows'
-import WorkflowEditor from '@/pages/admin/WorkflowEditor'
-import StatusPage from '@/pages/admin/StatusPage'
-import NotificationsSettingsPage from '@/pages/settings/NotificationsSettingsPage'
-import ProfileSettingsPage from '@/pages/settings/ProfileSettingsPage'
-import Reports from '@/pages/reports/Reports'
 import NotFound from '@/pages/NotFound'
-import KnowledgeBase from '@/pages/knowledge/KnowledgeBase'
-import ArticleDetail from '@/pages/knowledge/ArticleDetail'
-import ArticleEditor from '@/pages/knowledge/ArticleEditor'
-import NotificationsDocs from '@/pages/docs/NotificationsDocs'
-import DeploymentDocs from '@/pages/docs/DeploymentDocs'
-import MonitoringDocs from '@/pages/docs/MonitoringDocs'
 import Layout from '@/components/Layout'
 import RoleGuard from '@/components/RoleGuard'
 import { ThemeManager } from '@/components/ThemeManager'
+import { LoadingScreen } from '@/components/LoadingScreen'
+
+// Lazy: cada rota vira um chunk separado. Reduz o bundle inicial em ~60-70%.
+const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'))
+const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'))
+const TicketList = lazy(() => import('@/pages/tickets/TicketList'))
+const NewTicket = lazy(() => import('@/pages/tickets/NewTicket'))
+const TicketDetail = lazy(() => import('@/pages/tickets/TicketDetail'))
+const Users = lazy(() => import('@/pages/admin/Users'))
+const Settings = lazy(() => import('@/pages/admin/Settings'))
+const Integrations = lazy(() => import('@/pages/admin/Integrations'))
+const Workflows = lazy(() => import('@/pages/admin/Workflows'))
+const WorkflowEditor = lazy(() => import('@/pages/admin/WorkflowEditor'))
+const StatusPage = lazy(() => import('@/pages/admin/StatusPage'))
+const NotificationsSettingsPage = lazy(() => import('@/pages/settings/NotificationsSettingsPage'))
+const ProfileSettingsPage = lazy(() => import('@/pages/settings/ProfileSettingsPage'))
+const Reports = lazy(() => import('@/pages/reports/Reports'))
+const KnowledgeBase = lazy(() => import('@/pages/knowledge/KnowledgeBase'))
+const ArticleDetail = lazy(() => import('@/pages/knowledge/ArticleDetail'))
+const ArticleEditor = lazy(() => import('@/pages/knowledge/ArticleEditor'))
+const NotificationsDocs = lazy(() => import('@/pages/docs/NotificationsDocs'))
+const DeploymentDocs = lazy(() => import('@/pages/docs/DeploymentDocs'))
+const MonitoringDocs = lazy(() => import('@/pages/docs/MonitoringDocs'))
 
 import { AuthProvider } from '@/stores/useAuthStore'
 import { TicketProvider } from '@/stores/useTicketStore'
@@ -65,7 +70,8 @@ const App = () => (
                             <TooltipProvider>
                               <Toaster />
                               <Sonner />
-                              <Routes>
+                              <Suspense fallback={<LoadingScreen />}>
+                                <Routes>
                                 <Route path="/login" element={<Login />} />
                                 <Route path="/forgot-password" element={<ForgotPassword />} />
                                 <Route path="/reset-password" element={<ResetPassword />} />
@@ -165,7 +171,8 @@ const App = () => (
                                 </Route>
 
                                 <Route path="*" element={<NotFound />} />
-                              </Routes>
+                                </Routes>
+                              </Suspense>
                             </TooltipProvider>
                           </KnowledgeProvider>
                         </TicketProvider>

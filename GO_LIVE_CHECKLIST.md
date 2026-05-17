@@ -202,7 +202,7 @@ Recomendados (do mais simples ao mais robusto):
 
 ### Passo 4: configurar no Antropia Desk
 1. Abra https://desk.antrop-ia.com
-2. Login com `admin@antrop-ia.com` / `Antrop1a`
+2. Login com `admin@antrop-ia.com` / `<ROTACIONADA-VER-COFRE>`
 3. Va em `Configuracoes` → `Canais` (ou `/admin/settings`)
 4. Aba **Email** → ative
 5. Preencha:
@@ -227,11 +227,11 @@ Se nao chegar: ver caixa de spam, conferir DNS Resend, conferir API key.
 **Dificuldade**: trivial
 **Quem faz**: voce
 
-A senha `Antrop1a` e provisoria e esta documentada em multiplos lugares (PANORAMA.md, RELATORIO, este plano). **Trocar agora**.
+A senha `<ROTACIONADA-VER-COFRE>` e provisoria e esta documentada em multiplos lugares (PANORAMA.md, RELATORIO, este plano). **Trocar agora**.
 
 1. Login em https://desk.antrop-ia.com
 2. Canto superior direito → seu nome → `Perfil`
-3. Aba `Senha` → digite senha atual `Antrop1a` + nova senha forte (12+ chars, com numero/simbolo)
+3. Aba `Senha` → digite senha atual `<ROTACIONADA-VER-COFRE>` + nova senha forte (12+ chars, com numero/simbolo)
 4. Salvar
 5. Logout/login para confirmar
 

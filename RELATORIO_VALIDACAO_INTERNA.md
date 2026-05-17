@@ -158,7 +158,7 @@ Antes de qualquer cliente real entrar:
 | Branding (logo da org) | `/admin/settings → Branding` | Vazio (vai cair em fallback) |
 | SMTP ou WhatsApp | `/admin/settings → Canais` | NAO configurado |
 | Templates de notificacao | `/admin/settings → Templates` | Nao verificado |
-| Trocar senha do admin (`Antrop1a`) | UI ou Supabase dashboard | Senha inicial ainda em uso |
+| Trocar senha do admin (`<ROTACIONADA-VER-COFRE>`) | UI ou Supabase dashboard | Senha inicial ainda em uso |
 
 ### 2.3 Observacoes menores
 

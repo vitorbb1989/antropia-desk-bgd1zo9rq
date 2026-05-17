@@ -178,10 +178,6 @@ Deno.serve(async (req: Request) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
     )
   } catch (err: any) {
-    console.error('[process-notifications] Fatal error:', err)
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 },
-    )
+    return internalError(err)
   }
 })

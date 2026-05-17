@@ -1,0 +1,37 @@
+# Cloud Run Job para backup do Postgres do Supabase → GCS.
+#
+# Build:
+#   gcloud builds submit \
+#     --tag southamerica-east1-docker.pkg.dev/$PROJECT_ID/desk/backup:latest \
+#     -f Dockerfile.backup .
+#
+# Deploy:
+#   gcloud run jobs create desk-backup \
+#     --image southamerica-east1-docker.pkg.dev/$PROJECT_ID/desk/backup:latest \
+#     --region southamerica-east1 \
+#     --set-secrets=SUPABASE_DB_URL=supabase-db-url:latest \
+#     --set-env-vars=GCS_BUCKET=gs://antropia-desk-backups \
+#     --max-retries=2 \
+#     --task-timeout=15m
+#
+# Agendamento via Cloud Scheduler (diario 02:00 BRT = 05:00 UTC):
+#   gcloud scheduler jobs create http desk-backup-daily \
+#     --location=southamerica-east1 \
+#     --schedule="0 5 * * *" \
+#     --uri="https://southamerica-east1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$PROJECT_ID/jobs/desk-backup:run" \
+#     --http-method=POST \
+#     --oauth-service-account-email=cloudbuild-deploy@$PROJECT_ID.iam.gserviceaccount.com
+
+FROM google/cloud-sdk:slim
+
+# postgresql-client traz pg_dump compativel com Postgres 15.
+# Versao apt do Debian bookworm e 15.x — alinhado com Supabase.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY scripts/backup-supabase-gcs.sh /app/backup.sh
+RUN chmod +x /app/backup.sh
+
+ENTRYPOINT ["/app/backup.sh"]

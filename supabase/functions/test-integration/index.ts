@@ -1,5 +1,5 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-import { corsHeaders, handleCorsPreflightRequest, createCorsResponse } from '../_shared/cors.ts'
+import { corsHeaders, handleCorsPreflightRequest } from '../_shared/cors.ts'
 import { verifyUserAuth } from '../_shared/auth.ts'
 import { isAllowedUrl } from '../_shared/ssrf-guard.ts'
 

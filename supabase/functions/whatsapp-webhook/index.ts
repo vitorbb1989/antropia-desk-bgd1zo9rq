@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { errorResponse } from '../_shared/errors.ts'
 
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url)
@@ -13,9 +14,10 @@ Deno.serve(async (req: Request) => {
 
     if (mode === 'subscribe' && token && token === expectedToken) {
       console.log('[whatsapp-webhook] Verification challenge accepted')
+      // Meta requires the raw challenge value as plain text — don't wrap.
       return new Response(challenge, { status: 200 })
     }
-    return new Response('Forbidden', { status: 403 })
+    return errorResponse(403, 'UNAUTHORIZED', 'Invalid verification token')
   }
 
   // ── POST: Status Update Callback ─────────────────────────
@@ -53,8 +55,14 @@ Deno.serve(async (req: Request) => {
         headers: { 'Content-Type': 'application/json' },
       })
     } catch (err: any) {
-      console.error('[whatsapp-webhook] Error:', err.message)
-      // Always return 200 to Meta to prevent retries
+      // Log structured but always return 200 to Meta to prevent retries.
+      console.error(JSON.stringify({
+        severity: 'ERROR',
+        code: 'INTERNAL_ERROR',
+        source: 'whatsapp-webhook',
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      }))
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -62,7 +70,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return new Response('Method not allowed', { status: 405 })
+  return errorResponse(405, 'METHOD_NOT_ALLOWED', 'Only GET (verify) and POST are allowed')
 })
 
 async function updateNotificationStatus(

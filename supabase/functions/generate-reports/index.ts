@@ -1,7 +1,8 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { corsHeaders, handleCorsPreflightRequest, createCorsResponse } from '../_shared/cors.ts'
+import { corsHeaders, handleCorsPreflightRequest } from '../_shared/cors.ts'
 import { verifyCronSecret, verifyUserAuth } from '../_shared/auth.ts'
+import { internalError } from '../_shared/errors.ts'
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -137,11 +138,7 @@ Deno.serve(async (req: Request) => {
       status: 200,
     })
   } catch (err) {
-    console.error(err)
-    return new Response(JSON.stringify({ error: err.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
-    })
+    return internalError(err)
   }
 })
 
